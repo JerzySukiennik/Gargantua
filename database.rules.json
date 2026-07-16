@@ -1,0 +1,29 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$code": {
+        ".read": true,
+        "meta": {
+          ".write": "!data.exists() || data.child('lastActive').val() < (now - 7200000)",
+          ".validate": "newData.hasChildren(['createdAt', 'hostId'])"
+        },
+        "players": {
+          "$pid": {
+            ".write": true,
+            ".validate": "!newData.exists() || newData.hasChild('lastSeen')"
+          }
+        },
+        "world": {
+          "discovered": {
+            "$poi": {
+              ".write": "!data.exists()",
+              ".validate": "newData.hasChildren(['by', 'name', 'at'])"
+            }
+          }
+        }
+      }
+    }
+  }
+}
