@@ -8,6 +8,8 @@ import { buildLayout } from './station-layout.js';
 const MODEL_PATH = 'assets/models/space-kit/';
 const EMISSIVE_MATS = new Set(['_defaultMat']);
 const NO_COLLIDE = new Set(['alien']);
+const WINDOW_GLOW_MODELS = new Set(['corridor_window', 'hangar_roundGlass']);
+const WINDOW_GLOW_SRC = new Set(['dark', '_defaultMat']);
 
 export async function buildStation(scene) {
   const grid = CONFIG.world.grid;
@@ -32,15 +34,19 @@ export async function buildStation(scene) {
     return matCache.get(key);
   }
 
+  const windowGlowMat = new THREE.MeshLambertMaterial({
+    color: 0xfff3d6, emissive: new THREE.Color(0xffe9bd), emissiveIntensity: 1.0, name: 'windowGlow',
+  });
+
   const normBox = new THREE.Box3();
   await Promise.all(names.map((n) => new Promise((resolve, reject) => {
     loader.load(MODEL_PATH + n + '.glb', (gltf) => {
       const inner = gltf.scene;
+      const glow = WINDOW_GLOW_MODELS.has(n);
       inner.traverse((o) => {
         if (o.isMesh) {
-          o.material = Array.isArray(o.material)
-            ? o.material.map(sharedMaterial)
-            : sharedMaterial(o.material);
+          const map = (m) => (glow && WINDOW_GLOW_SRC.has(m.name) ? windowGlowMat : sharedMaterial(m));
+          o.material = Array.isArray(o.material) ? o.material.map(map) : map(o.material);
         }
       });
       const root = new THREE.Group();
@@ -118,6 +124,15 @@ export async function buildStation(scene) {
     place(obj, e);
   }
 
+  const interiorGlowMat = new THREE.MeshBasicMaterial({ color: 0xffe3ae, name: 'interiorGlow' });
+  for (const e of layout) {
+    if (e.m !== 'corridor_window') continue;
+    const boxMesh = new THREE.Mesh(new THREE.BoxGeometry(grid * 0.86, grid * 0.86, grid * 0.86), interiorGlowMat);
+    boxMesh.position.set(e.c[0] * grid, e.c[1] * grid + grid * 0.5, e.c[2] * grid);
+    group.add(boxMesh);
+    boxMesh.updateMatrixWorld(true);
+  }
+
   const panelMat = new THREE.MeshLambertMaterial({ color: 0x1a2a4a, map: makePanelTexture() });
   const panelEdgeMat = new THREE.MeshLambertMaterial({ color: 0xb8c0cc });
   const boomMat = new THREE.MeshLambertMaterial({ color: 0x9aa4b2 });
@@ -144,6 +159,17 @@ export async function buildStation(scene) {
   group.updateMatrixWorld(true);
 
   mergeStaticDraws(scene, group);
+
+  const lampDefs = [
+    { pos: [0, 8, 30], color: 0xffdfae, intensity: 260, distance: 45 },
+    { pos: [-32, 8, -18], color: 0xcfe0ff, intensity: 220, distance: 42 },
+    { pos: [32, 6, 15], color: 0xffe6c4, intensity: 170, distance: 36 },
+  ];
+  for (const l of lampDefs) {
+    const lamp = new THREE.PointLight(l.color, l.intensity, l.distance, 1.8);
+    lamp.position.set(...l.pos);
+    scene.add(lamp);
+  }
 
   const bounds = new THREE.Box3().setFromObject(group);
   const center = bounds.getCenter(new THREE.Vector3());

@@ -15,10 +15,10 @@ precision highp float;
 varying vec2 vUv;
 uniform float uTime;
 
-const float RS = 0.15;
-const float FLAT = 0.22;
-const float DISK_IN = 1.5;
-const float DISK_OUT = 4.6;
+const float RS = 0.115;
+const float FLAT = 0.20;
+const float DISK_IN = 1.8;
+const float DISK_OUT = 7.2;
 const float HALO_IN = 1.02;
 const float HALO_OUT = 1.8;
 const float BEAM = 0.42;
@@ -86,9 +86,6 @@ void main() {
 
   float photon = exp(-abs(rN - 1.06) * 16.0) * 1.6;
 
-  vec3 col = vec3(0.0);
-  float lum = 0.0;
-
   float defl = 0.55 * RS / max(b, 1e-4);
   float swirl = defl * defl * 90.0;
   float ca = cos(swirl); float sa = sin(swirl);
@@ -96,49 +93,51 @@ void main() {
   wu *= (1.0 - 0.35 * defl);
   float stars = starLayer(wu * 6.0, 9.0, 1.0) + starLayer(wu * 6.0 + 31.7, 21.0, 0.55);
   stars *= smoothstep(0.94, 1.35, rN);
-  col += vec3(0.75, 0.82, 1.0) * stars;
 
+  vec3 diskCol = vec3(0.0);
+  float diskI = 0.0;
   {
     vec2 q = vec2(u.x, u.y / FLAT);
     float rq = length(q) / RS;
     float theta = atan(q.y, q.x);
-    float band = smoothstep(DISK_IN, DISK_IN + 0.55, rq) * (1.0 - smoothstep(DISK_OUT * 0.4, DISK_OUT * 0.92, rq));
-    if (band > 0.001) {
+    float inEdge = smoothstep(DISK_IN, DISK_IN + 0.45, rq);
+    if (inEdge > 0.001) {
       float tR = clamp((rq - DISK_IN) / (DISK_OUT - DISK_IN), 0.0, 1.0);
       float st = diskStreaks(rq * 0.3, theta, tR);
       float doppler = pow(1.0 + BEAM * cos(theta + 3.14159), 3.0);
-      float frontMask = mix(smoothstep(1.06, 0.98, rN), 1.0, smoothstep(0.005, -0.005, u.y));
-      float inGlow = 1.0 + 2.4 * exp(-(rq - DISK_IN) * 1.4);
-      float fall = exp(-tR * tR * 3.4);
-      float I = band * st * doppler * fall * inGlow * frontMask;
-      col += diskColor(tR) * I * 1.35;
-      lum += I;
+      float inGlow = 1.0 + 2.2 * exp(-(rq - DISK_IN) * 1.2);
+      float fall = exp(-tR * tR * 4.2);
+      diskI = inEdge * st * doppler * fall * inGlow;
+      diskCol = diskColor(tR) * diskI * 1.35;
     }
   }
+  float front = smoothstep(0.25, -0.6, u.y / RS);
 
+  vec3 haloCol = vec3(0.0);
+  float haloI = 0.0;
   {
-    float haloR = rN;
-    float band = smoothstep(HALO_IN, HALO_IN + 0.07, haloR) * (1.0 - smoothstep(HALO_IN + 0.22, HALO_OUT, haloR));
+    float band = smoothstep(HALO_IN, HALO_IN + 0.07, rN) * (1.0 - smoothstep(HALO_IN + 0.22, HALO_OUT, rN));
     if (band > 0.001) {
       float theta = atan(u.y, u.x);
-      float tR = clamp((haloR - HALO_IN) / (HALO_OUT - HALO_IN), 0.0, 1.0);
-      float st = diskStreaks(haloR * 0.55 + 1.7, theta * 0.5, tR);
+      float tR = clamp((rN - HALO_IN) / (HALO_OUT - HALO_IN), 0.0, 1.0);
+      float st = diskStreaks(rN * 0.55 + 1.7, theta * 0.5, tR);
       float doppler = pow(1.0 + BEAM * 0.8 * cos(theta + 3.14159), 3.0);
       float vertBoost = 0.45 + 0.95 * abs(sin(theta));
-      float I = band * st * doppler * vertBoost * exp(-tR * 2.6) * 0.95;
-      col += diskColor(tR * 0.65) * I;
-      lum += I;
+      haloI = band * st * doppler * vertBoost * exp(-tR * 2.6) * 0.95;
+      haloCol = diskColor(tR * 0.65) * haloI;
     }
   }
 
-  col += vec3(1.5, 1.25, 0.95) * photon;
-  lum += photon;
-
+  vec3 col = vec3(0.75, 0.82, 1.0) * stars + haloCol + vec3(1.5, 1.25, 0.95) * photon + diskCol * (1.0 - front);
+  float lum = haloI + photon + diskI * (1.0 - front);
   col *= (1.0 - shadow);
   lum *= (1.0 - shadow);
+  col += diskCol * front;
+  lum += diskI * front;
 
-  float alpha = max(max(shadow, clamp(lum * 2.0, 0.0, 1.0)), clamp(stars * 1.5, 0.0, 1.0));
-  alpha = max(alpha, smoothstep(1.35, 0.94, rN));
+  float alpha = max(max(shadow, clamp(lum * 2.0, 0.0, 1.0)), clamp(stars * 1.5, 0.0, 1.0) * (1.0 - shadow));
+  alpha = max(alpha, smoothstep(1.35, 0.94, rN) * max(1.0 - front, shadow));
+  alpha = max(alpha, clamp(diskI * front * 2.0, 0.0, 1.0));
   alpha *= edgeFade;
 
   gl_FragColor = vec4(col * edgeFade, alpha);

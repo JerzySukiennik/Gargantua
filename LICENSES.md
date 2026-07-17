@@ -5,11 +5,13 @@
 - License: **CC0 1.0 Universal** (public domain, no attribution required)
 - Fetched via GitHub mirror of the official pack.
 
-## Sound Effects — `assets/audio/*.ogg`
-All CC0 1.0 Universal, by Kenney ([kenney.nl](https://kenney.nl)):
-- `grab_*.ogg`, `clunk_*.ogg`, `impact_hard.ogg` — Kenney Impact Sounds
-- `discovery.ogg`, `ui_tick.ogg`, `warn.ogg`, `join.ogg`, `leave.ogg` — Kenney Interface Sounds
-- `thruster.ogg`, `radio_blip.ogg`, `refill.ogg`, `servo.ogg` — Kenney Sci-Fi Sounds
+## Sound Effects — `assets/audio/*.mp3`
+All CC0 1.0 Universal, by Kenney ([kenney.nl](https://kenney.nl)), converted OGG→MP3 for Safari compatibility:
+- `grab_*.mp3`, `clunk_*.mp3`, `impact_hard.mp3` — Kenney Impact Sounds
+- `discovery.mp3`, `ui_tick.mp3`, `warn.mp3`, `join.mp3`, `leave.mp3` — Kenney Interface Sounds
+- `radio_blip.mp3`, `refill.mp3`, `servo.mp3` — Kenney Sci-Fi Sounds
+
+Thruster hiss and breathing are synthesized at runtime (WebAudio) — no source files.
 
 ## Music — `assets/audio/music_frozen_star.mp3`
 - **"Frozen Star" by Kevin MacLeod** ([incompetech.com](https://incompetech.com))

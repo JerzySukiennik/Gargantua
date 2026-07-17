@@ -7,6 +7,7 @@ import { createInput } from './core/input.js';
 import { createBlackHole } from './scene/blackhole.js';
 import { buildStation } from './scene/station.js';
 import { createAvatars } from './scene/avatars.js';
+import { createHands } from './scene/hands.js';
 import { createPlayer } from './game/player.js';
 import { createSuit } from './game/suit.js';
 import { createPois } from './game/pois.js';
@@ -36,6 +37,7 @@ let transport = null;
 let playerName = 'ASTRONAUT';
 let colorSlot = 0;
 
+const hands = createHands(camera);
 const headlamp = new THREE.SpotLight(0xfff6e0, 0, 30, Math.PI / 7, 0.45, 1.2);
 camera.add(headlamp);
 camera.add(headlamp.target);
@@ -69,7 +71,7 @@ const lobby = createLobby({
   },
 });
 
-player.on('onGrab', () => audio.playGrab());
+player.on('onGrab', () => { audio.playGrab(); hands.onGrab(); });
 player.on('onRelease', () => {});
 player.on('onPushOff', () => audio.play('servo', { pitch: 1.3, vol: 0.25 }));
 player.on('onImpact', (speed) => {
@@ -173,6 +175,8 @@ function render(dt) {
       const s = CONFIG.player.lookSensitivity;
       rotateCamera(dx * s, dy * s, dt);
       player.applyComfortRoll(dt);
+      camera.updateMatrixWorld();
+      hands.update(dt, player.state);
     }
     if (transport) {
       transport.sampleRemotes(Date.now(), remoteSamples);

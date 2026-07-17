@@ -1,20 +1,19 @@
 // Audio: streamed CC-BY music via HTMLAudio, WebAudio SFX buffers, synthesized breathing loop.
 const SFX = {
-  grab_0: 'assets/audio/grab_0.ogg',
-  grab_1: 'assets/audio/grab_1.ogg',
-  grab_2: 'assets/audio/grab_2.ogg',
-  clunk_0: 'assets/audio/clunk_0.ogg',
-  clunk_1: 'assets/audio/clunk_1.ogg',
-  impact_hard: 'assets/audio/impact_hard.ogg',
-  discovery: 'assets/audio/discovery.ogg',
-  ui_tick: 'assets/audio/ui_tick.ogg',
-  warn: 'assets/audio/warn.ogg',
-  join: 'assets/audio/join.ogg',
-  leave: 'assets/audio/leave.ogg',
-  radio_blip: 'assets/audio/radio_blip.ogg',
-  refill: 'assets/audio/refill.ogg',
-  servo: 'assets/audio/servo.ogg',
-  thruster: 'assets/audio/thruster.ogg',
+  grab_0: 'assets/audio/grab_0.mp3',
+  grab_1: 'assets/audio/grab_1.mp3',
+  grab_2: 'assets/audio/grab_2.mp3',
+  clunk_0: 'assets/audio/clunk_0.mp3',
+  clunk_1: 'assets/audio/clunk_1.mp3',
+  impact_hard: 'assets/audio/impact_hard.mp3',
+  discovery: 'assets/audio/discovery.mp3',
+  ui_tick: 'assets/audio/ui_tick.mp3',
+  warn: 'assets/audio/warn.mp3',
+  join: 'assets/audio/join.mp3',
+  leave: 'assets/audio/leave.mp3',
+  radio_blip: 'assets/audio/radio_blip.mp3',
+  refill: 'assets/audio/refill.mp3',
+  servo: 'assets/audio/servo.mp3',
 };
 
 export function createAudio() {
@@ -75,22 +74,35 @@ export function createAudio() {
   }
 
   function setThruster(on) {
-    if (!ctx || !buffers.thruster) return;
+    if (!ctx) return;
     if (on && !thrusterSrc) {
+      const len = 2 * ctx.sampleRate;
+      if (!buffers.__hiss) {
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+        buffers.__hiss = buf;
+      }
       thrusterSrc = ctx.createBufferSource();
-      thrusterSrc.buffer = buffers.thruster;
+      thrusterSrc.buffer = buffers.__hiss;
       thrusterSrc.loop = true;
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 350;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 3800;
       thrusterGain = ctx.createGain();
       thrusterGain.gain.setValueAtTime(0.0001, ctx.currentTime);
-      thrusterGain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + 0.15);
-      thrusterSrc.connect(thrusterGain).connect(sfxGain);
+      thrusterGain.gain.exponentialRampToValueAtTime(0.45, ctx.currentTime + 0.12);
+      thrusterSrc.connect(hp).connect(lp).connect(thrusterGain).connect(sfxGain);
       thrusterSrc.start();
     } else if (!on && thrusterSrc) {
       const src = thrusterSrc, g = thrusterGain;
       thrusterSrc = null;
       thrusterGain = null;
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.2);
-      setTimeout(() => { try { src.stop(); } catch (e) { /* done */ } }, 300);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+      setTimeout(() => { try { src.stop(); } catch (e) { /* done */ } }, 280);
     }
   }
 

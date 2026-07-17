@@ -1,4 +1,4 @@
-// Zero-G player: FLOAT/GRAB state machine, tether crawl, push-off, RCS, sphere-vs-AABB collision.
+// Zero-G player: momentum-preserving rope-swing grab, push-off, RCS, sphere-vs-AABB collision.
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 
@@ -7,7 +7,6 @@ const P = CONFIG.player;
 export function createPlayer({ camera, input, station }) {
   const pos = new THREE.Vector3(0, 14, 26);
   const vel = new THREE.Vector3();
-  const prevPos = new THREE.Vector3().copy(pos);
 
   const raycaster = new THREE.Raycaster();
   raycaster.far = P.grabRange;
@@ -36,8 +35,6 @@ export function createPlayer({ camera, input, station }) {
   const closest = new THREE.Vector3();
   const ndc = new THREE.Vector2(0, 0);
 
-  let grabEaseT = 0;
-  let returnT = 0;
   let aimTick = 0;
 
   function updateAim() {
@@ -53,15 +50,13 @@ export function createPlayer({ camera, input, station }) {
     return n;
   }
 
-  function startGrab() {
-    if (!state.aim) return;
+  function grabTo(aim) {
     state.mode = 'grab';
     state.grab = {
-      anchor: state.aim.point.clone(),
-      normal: state.aim.normal.clone(),
-      dist: Math.min(Math.max(pos.distanceTo(state.aim.point), P.tetherMin), P.tetherMax),
+      anchor: aim.point.clone(),
+      normal: aim.normal.clone(),
+      len: Math.min(Math.max(pos.distanceTo(aim.point), P.tetherMin), P.tetherMax),
     };
-    grabEaseT = 0;
     emit('onGrab', state.grab);
   }
 
@@ -77,12 +72,13 @@ export function createPlayer({ camera, input, station }) {
         if (into < 0.1) tmp.addScaledVector(n, 0.25 - into).normalize();
       }
       vel.addScaledVector(tmp, P.pushOffSpeed);
+      if (vel.length() > P.maxSpeed) vel.setLength(P.maxSpeed);
       emit('onPushOff');
     }
     emit('onRelease');
   }
 
-  function collide(dt) {
+  function collide() {
     const idxs = station.query(pos, P.radius + 0.5);
     for (const i of idxs) {
       const c = station.colliders[i];
@@ -110,13 +106,13 @@ export function createPlayer({ camera, input, station }) {
   }
 
   function update(dt, tick) {
-    prevPos.copy(pos);
-
     aimTick++;
     if (aimTick % 3 === 0 || state.aim === null) updateAim();
 
     if (!state.inputLocked) {
-      if (tick.lmbPressed && state.mode === 'float' && state.aim) startGrab();
+      if (tick.lmbPressed && state.aim) {
+        grabTo(state.aim);
+      }
       if (state.mode === 'grab') {
         if (tick.pressed.has('Space')) release(true);
         else if (!tick.lmb) release(false);
@@ -125,41 +121,31 @@ export function createPlayer({ camera, input, station }) {
 
     if (state.mode === 'grab' && state.grab) {
       const g = state.grab;
-      if (tick.lmbPressed && state.aim && state.aim.point.distanceToSquared(g.anchor) > 0.04) {
-        g.anchor.copy(state.aim.point);
-        g.normal.copy(state.aim.normal);
-        g.dist = Math.min(Math.max(pos.distanceTo(g.anchor), P.tetherMin), P.tetherMax);
-        grabEaseT = 0;
-        emit('onGrab', g);
-      }
 
       if (!state.inputLocked) {
-        if (input.isDown('KeyW')) g.dist = Math.max(P.tetherMin, g.dist - P.reelSpeed * dt);
-        if (input.isDown('KeyS')) g.dist = Math.min(P.tetherMax, g.dist + P.reelSpeed * dt);
-      }
-
-      tmp.subVectors(pos, g.anchor);
-      if (tmp.lengthSq() < 1e-6) tmp.copy(g.normal);
-      tmp.normalize();
-
-      if (!state.inputLocked && (input.isDown('KeyA') || input.isDown('KeyD'))) {
-        camera.getWorldDirection(fwd);
-        right.crossVectors(fwd, camera.up).normalize();
-        const dir = input.isDown('KeyD') ? 1 : -1;
-        tmp2.copy(right).multiplyScalar(dir);
-        tmp2.addScaledVector(tmp, -tmp2.dot(tmp));
-        if (tmp2.lengthSq() > 1e-6) {
-          tmp2.normalize();
-          pos.addScaledVector(tmp2, P.swingSpeed * dt);
+        if (input.isDown('KeyW')) g.len = Math.max(P.tetherMin, g.len - P.reelSpeed * dt);
+        if (input.isDown('KeyS')) g.len = Math.min(P.tetherMax, g.len + P.reelSpeed * dt);
+        if (input.isDown('KeyA') || input.isDown('KeyD')) {
+          camera.getWorldDirection(fwd);
+          right.crossVectors(fwd, camera.up).normalize();
           tmp.subVectors(pos, g.anchor).normalize();
+          tmp2.copy(right).multiplyScalar(input.isDown('KeyD') ? 1 : -1);
+          tmp2.addScaledVector(tmp, -tmp2.dot(tmp));
+          if (tmp2.lengthSq() > 1e-6) vel.addScaledVector(tmp2.normalize(), P.swingAccel * dt);
         }
       }
 
-      tmp2.copy(g.anchor).addScaledVector(tmp, g.dist);
-      grabEaseT = Math.min(1, grabEaseT + dt / P.grabEase);
-      const ease = 1 - Math.pow(1 - grabEaseT, 3);
-      pos.lerp(tmp2, Math.min(1, ease * 0.5 + 12 * dt));
-      vel.subVectors(pos, prevPos).divideScalar(dt);
+      vel.multiplyScalar(Math.max(0, 1 - P.grabDamping * dt));
+      pos.addScaledVector(vel, dt);
+
+      tmp.subVectors(pos, g.anchor);
+      const dist = tmp.length() || 1e-6;
+      if (dist > g.len) {
+        tmp.divideScalar(dist);
+        pos.copy(g.anchor).addScaledVector(tmp, g.len);
+        const vr = vel.dot(tmp);
+        if (vr > 0) vel.addScaledVector(tmp, -vr);
+      }
       if (vel.length() > P.maxSpeed) vel.setLength(P.maxSpeed);
     } else {
       state.thrusting = false;
@@ -181,13 +167,12 @@ export function createPlayer({ camera, input, station }) {
       pos.addScaledVector(vel, dt);
     }
 
-    collide(dt);
+    collide();
 
     tmp.copy(pos).clamp(station.bounds.min, station.bounds.max);
     state.distToStation = pos.distanceTo(tmp);
 
     if (state.returning) {
-      returnT += dt;
       tmp.subVectors(station.center, pos).normalize();
       vel.lerp(tmp2.copy(tmp).multiplyScalar(3.0), 0.03);
       if (state.distToStation < 10) {
@@ -203,7 +188,6 @@ export function createPlayer({ camera, input, station }) {
     if (state.returning) return;
     state.returning = true;
     state.inputLocked = true;
-    returnT = 0;
     if (state.mode === 'grab') release(false);
   }
 
